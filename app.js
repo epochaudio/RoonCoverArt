@@ -131,7 +131,7 @@ function makelayout(settings) {
 var roon = new RoonApi({
     extension_id:        "com.epochaudio.web.controller",
     display_name:        "ArtFrame",
-    display_version:     "2.1.1",
+    display_version:     "2.1.2",
     publisher:           "门耳朵制作",
     email:              "masked",
     website:            "https://shop236654229.taobao.com/",

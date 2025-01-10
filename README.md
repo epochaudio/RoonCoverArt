@@ -1,6 +1,6 @@
 # ArtFrame for Roon
 
-ArtFrame is an album artwork display extension designed for Roon music system, version 2.1.1.
+ArtFrame is an album artwork display extension designed for Roon music system, version 2.1.2.
 
 ## Features
 
@@ -103,7 +103,7 @@ Edit `config/default.json`:
 
 - ESC: Exit fullscreen mode
 
-## New Features in 2.1.1
+## New Features in 2.1.2
 
 - Enhanced zone pairing mechanism
   - Persistent zone selection across sessions
