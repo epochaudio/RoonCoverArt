@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  roonalbumart:
+    image: epochaudio/artframe:latest
+    build: .
+    network_mode: "host"
+    restart: unless-stopped
