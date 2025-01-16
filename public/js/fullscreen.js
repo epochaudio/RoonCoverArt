@@ -303,8 +303,8 @@ async function updateRandomImages() {
 }
 
 // 图片更新函数
-function updateImage(imageKey) {
-    console.log('开始更新图片:', imageKey);
+function updateImage(imageKey, albumName) {
+    console.log('开始更新图片:', { imageKey, albumName });
     if (!imageKey) {
         console.log('无图片key，使用默认图片');
         $('#coverImage').attr('src', '/img/transparent.png');
@@ -314,6 +314,7 @@ function updateImage(imageKey) {
     }
 
     const imageUrl = '/roonapi/getImage?image_key=' + imageKey + 
+        '&albumName=' + encodeURIComponent(albumName || '') +
         '&scale=full&format=image/jpeg&quality=100';
     console.log('图片URL:', imageUrl);
     
@@ -393,9 +394,21 @@ socket.on('zoneStatus', function(payload) {
         const zone = payload.find(z => z.zone_id === settings.zoneID) || payload[0];
         console.log('当前zone:', zone);
         if (zone.now_playing && zone.now_playing.image_key !== currentImageKey) {
-            console.log('更新图片key:', zone.now_playing.image_key);
-            currentImageKey = zone.now_playing.image_key;
-            updateImage(currentImageKey);
+            const nowPlaying = zone.now_playing;
+            console.log('更新图片key:', nowPlaying.image_key);
+            currentImageKey = nowPlaying.image_key;
+            
+            // 只获取专辑名
+            const albumName = nowPlaying.three_line && nowPlaying.three_line.line3;
+            
+            console.log('专辑信息:', {
+                albumName,
+                raw: nowPlaying.three_line
+            });
+            
+            if (albumName) {
+                updateImage(currentImageKey, albumName);
+            }
         }
     }
 });
@@ -425,7 +438,18 @@ socket.on('nowplaying', function(data) {
             console.log('保存封面key到localStorage:', data.image_key);
             localStorage.setItem('lastImageKey', data.image_key);
             currentImageKey = data.image_key;
-            updateImage(data.image_key);
+            
+            // 只获取专辑名
+            const albumName = data.three_line && data.three_line.line3;
+            
+            console.log('专辑信息:', {
+                albumName,
+                raw: data.three_line
+            });
+            
+            if (albumName) {
+                updateImage(data.image_key, albumName);
+            }
             toggleDisplayMode(true);
         }
         

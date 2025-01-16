@@ -438,22 +438,27 @@ app.get("/", function(req, res) {
 });
 
 app.get("/roonapi/getImage", function(req, res) {
+  console.log('收到图片请求:', {
+    image_key: req.query.image_key,
+    albumName: req.query.albumName
+  });
+
   if (!core || !core.services || !core.services.RoonApiImage) {
     console.log('Roon Core未就绪或未配对');
     res.status(500).json({ error: 'Roon Core未就绪或未配对' });
     return;
   }
-  
-  console.log('收到图片请求:', {
-    image_key: req.query.image_key,
-    albumName: req.query.albumName,
-    artistName: req.query.artistName
-  });
-  
+
   core.services.RoonApiImage.get_image(
     req.query.image_key,
     { scale: "fit", width: 1080, height: 1080, format: "image/jpeg" },
     async function(cb, contentType, body) {
+      console.log('获取图片结果:', {
+        success: !!body,
+        contentType,
+        size: body ? body.length : 0
+      });
+
       if (!body) {
         console.log('获取图片失败');
         res.status(500).json({ error: '获取图片失败' });
@@ -465,13 +470,23 @@ app.get("/roonapi/getImage", function(req, res) {
       console.log('自动保存状态:', {
         autoSave,
         hasAlbumName: !!req.query.albumName,
-        hasArtistName: !!req.query.artistName
+        image_key: req.query.image_key
       });
       
       if (autoSave && req.query.albumName) {
         try {
-          console.log('开始保存专辑封面:', req.query.albumName);
-          await saveArtwork(body, req.query.albumName, req.query.artistName);
+          // 检查是否已经保存过这个image_key
+          const saveDir = config.has('artwork.saveDir') ? config.get('artwork.saveDir') : './images';
+          const files = await fs.readdir(saveDir);
+          const imageKeyExists = files.some(file => file.includes(req.query.image_key));
+          
+          if (!imageKeyExists) {
+            console.log('开始保存专辑封面:', req.query.albumName);
+            await saveArtwork(body, req.query.albumName, req.query.image_key);
+            console.log('专辑封面保存成功');
+          } else {
+            console.log('该图片已经保存过:', req.query.image_key);
+          }
         } catch (error) {
           console.error('保存专辑封面时出错:', error);
         }
@@ -565,7 +580,7 @@ app.get("/api/images", async function(req, res) {
 const fs = require('fs').promises;
 const path = require('path');
 
-async function saveArtwork(imageData, albumName, artistName) {
+async function saveArtwork(imageData, albumName, imageKey) {
     try {
         const saveDir = config.has('artwork.saveDir') ? config.get('artwork.saveDir') : './images';
         const format = config.has('artwork.format') ? config.get('artwork.format') : 'jpg';
@@ -575,10 +590,9 @@ async function saveArtwork(imageData, albumName, artistName) {
         
         // 清理文件名
         const safeAlbumName = albumName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const safeArtistName = artistName ? artistName.replace(/[^a-z0-9]/gi, '_').toLowerCase() : '';
-        const fileName = safeArtistName 
-            ? `${safeAlbumName}_by_${safeArtistName}.${format}`
-            : `${safeAlbumName}.${format}`;
+        
+        // 使用image_key和专辑名组合成文件名
+        const fileName = `${safeAlbumName}_${imageKey}.${format}`;
         const filePath = path.join(saveDir, fileName);
         
         // 保存文件
