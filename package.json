@@ -1,7 +1,7 @@
 {
-  "name": "封面艺术家",
-  "version": "2.1.2",
-  "description": "ArtFrame",
+  "name": "CoverArt",
+  "version": "3.0.1",
+  "description": "CoverArt",
   "main": "app.js",
   "author": "门耳朵制作",
   "license": "MIT",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "body-parser": "^1.19.0",
+    "colorthief": "^2.4.0",
     "command-line-args": "^5.1.1",
     "command-line-usage": "^6.1.0",
     "config": "^3.3.1",

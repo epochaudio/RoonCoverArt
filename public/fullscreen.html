@@ -16,533 +16,249 @@
     <script src="/js/color-thief.js"></script>
     <script src="/js-cookie/js.cookie.js"></script>
     <script src="/js/fullscreen.js"></script>
-    <script>
-      let mouseTimer;
-      let isButtonHovered = false;
-
-      // 检测是否为触摸屏设备
-      function isTouchDevice() {
-        return (('ontouchstart' in window) ||
-          (navigator.maxTouchPoints > 0) ||
-          (navigator.msMaxTouchPoints > 0));
-      }
-
-      // 处理鼠标移动
-      function handleMouseMove() {
-        if (isButtonHovered) return; // 如果鼠标在按钮上，不要隐藏
-        document.body.style.cursor = 'default';
-        clearTimeout(mouseTimer);
-        mouseTimer = setTimeout(() => {
-          if (!isButtonHovered) { // 再次检查鼠标是否在按钮上
-            document.body.style.cursor = 'none';
-          }
-        }, 1000); // 改为1秒后隐藏鼠标
-      }
-
-      // 检测是否为iOS设备
-      function isIOS() {
-        return [
-          'iPad Simulator',
-          'iPhone Simulator',
-          'iPod Simulator',
-          'iPad',
-          'iPhone',
-          'iPod'
-        ].includes(navigator.platform)
-        || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
-      }
-
-      // 优化的全屏切换函数
-      function toggleFullScreen() {
-        try {
-          if (isIOS()) {
-            // iOS设备特殊处理
-            if (document.documentElement.webkitEnterFullscreen) {
-              document.documentElement.webkitEnterFullscreen();
-            } else if (document.body.webkitEnterFullscreen) {
-              document.body.webkitEnterFullscreen();
-            } else if (document.documentElement.webkitRequestFullscreen) {
-              document.documentElement.webkitRequestFullscreen();
-            }
-            return;
-          }
-
-          // 其他设备的处理
-          if (!document.fullscreenElement &&
-              !document.webkitFullscreenElement &&
-              !document.mozFullScreenElement &&
-              !document.msFullscreenElement) {
-            // 进入全屏
-            const element = document.documentElement;
-            if (element.requestFullscreen) {
-              element.requestFullscreen();
-            } else if (element.webkitRequestFullscreen) {
-              element.webkitRequestFullscreen();
-            } else if (element.mozRequestFullScreen) {
-              element.mozRequestFullScreen();
-            } else if (element.msRequestFullscreen) {
-              element.msRequestFullscreen();
-            }
-          } else {
-            // 退出全屏
-            if (document.exitFullscreen) {
-              document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-              document.webkitExitFullscreen();
-            } else if (document.mozCancelFullScreen) {
-              document.mozCancelFullScreen();
-            } else if (document.msExitFullscreen) {
-              document.msExitFullscreen();
-            }
-          }
-        } catch (err) {
-          console.log('全屏切换出错:', err);
-        }
-      }
-
-      document.addEventListener('DOMContentLoaded', function() {
-        const isTouch = isTouchDevice();
-        const hasShownTip = localStorage.getItem('hasShownFullscreenTip');
-        
-        // 移除原有的全屏按钮
-        const fullscreenButton = document.getElementById('fullscreenButton');
-        if (fullscreenButton) {
-          fullscreenButton.style.display = 'none';
-        }
-
-        // 添加鼠标移动监听
-        if (!isTouch) {
-          document.addEventListener('mousemove', handleMouseMove);
-          // 初始状态隐藏鼠标
-          setTimeout(() => {
-            document.body.style.cursor = 'none';
-          }, 1000);
-        }
-
-        // 为封面图片添加点击事件
-        const coverImage = document.getElementById('coverImage');
-        if (coverImage) {
-          coverImage.style.cursor = 'pointer';
-          coverImage.addEventListener('click', function(e) {
-            e.stopPropagation();
-            toggleFullScreen();
-          });
-
-          if (!isTouch) {
-            // 非触摸设备：添加鼠标指针效果
-            coverImage.addEventListener('mouseenter', () => {
-              isButtonHovered = true;
-              document.body.style.cursor = 'pointer';
-            });
-            
-            coverImage.addEventListener('mouseleave', () => {
-              isButtonHovered = false;
-              handleMouseMove();
-            });
-          } else if (!hasShownTip) {
-            // 触摸设备：首次访问时显示提示，3秒后自动消失
-            const tip = document.createElement('div');
-            tip.className = 'fullscreen-tip';
-            tip.textContent = '点击封面切换全屏模式';
-            document.querySelector('.fullscreen-container').appendChild(tip);
-            
-            setTimeout(function() {
-              tip.style.opacity = '0';
-              setTimeout(() => tip.remove(), 500);
-            }, 3000);
-            
-            localStorage.setItem('hasShownFullscreenTip', 'true');
-          }
-        }
-
-        // 监听全屏状态变化
-        document.addEventListener('fullscreenchange', updateFullscreenState);
-        document.addEventListener('webkitfullscreenchange', updateFullscreenState);
-        document.addEventListener('mozfullscreenchange', updateFullscreenState);
-        document.addEventListener('MSFullscreenChange', updateFullscreenState);
-
-        function updateFullscreenState() {
-          if (!isTouch) {
-            setTimeout(() => {
-              if (!isButtonHovered) {
-                document.body.style.cursor = 'none';
-              }
-            }, 1000);
-          }
-        }
-
-        // 初始化时钟
-        setInterval(updateTime, 1000);
-        updateTime();
-      });
-
-      let playbackTimer = null;
-
-      // 监听非播放状态（包括暂停和停止）
-      socket.on('notPlaying', function(data) {
-        console.log('收到非播放状态事件:', data);
-        try {
-          if (playbackTimer) {
-            console.log('清除现有定时器');
-            clearTimeout(playbackTimer);
-          }
-          
-          console.log('设置15秒切换定时器');
-          playbackTimer = setTimeout(() => {
-            console.log('切换到时钟显示');
-            toggleDisplayMode(false);
-          }, 15000);
-        } catch (error) {
-          console.error('处理非播放状态事件时出错:', error);
-        }
-      });
-
-      // 监听播放状态
-      socket.on('nowplaying', function(data) {
-        console.log('收到开始播放事件:', data);
-        try {
-          if (data && data.image_key) {
-            console.log('保存封面key到localStorage:', data.image_key);
-            localStorage.setItem('lastImageKey', data.image_key);
-            toggleDisplayMode(true);
-          }
-          
-          if (playbackTimer) {
-            console.log('取消切换定时器');
-            clearTimeout(playbackTimer);
-            playbackTimer = null;
-          }
-        } catch (error) {
-          console.error('处理播放事件时出错:', error);
-        }
-      });
-
-      // 监听 Socket.IO 连接状态
-      socket.on('pairStatus', function(status) {
-        const pairDisabled = document.getElementById('pairDisabled');
-        if (status.pairEnabled) {
-          if (pairDisabled) {
-            pairDisabled.style.display = 'none';
-          }
-        } else {
-          if (pairDisabled) {
-            pairDisabled.style.display = 'flex';
-          }
-        }
-      });
-
-      // 添加时钟功能
-      function updateTime() {
-        const now = new Date();
-        
-        const dateStr = now.toLocaleDateString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          weekday: 'long'
-        });
-        document.querySelector('.date').textContent = dateStr;
-        
-        const timeStr = now.toLocaleTimeString('zh-CN', {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        });
-        const [hours, minutes, seconds] = timeStr.split(':');
-        document.querySelector('.time').innerHTML = `${hours}:${minutes}<span class="seconds">${seconds}</span>`;
-      }
-
-      // 切换显示模式
-      function toggleDisplayMode(isPlaying) {
-        const clockContainer = document.querySelector('.clock-container');
-        const fullscreenContainer = document.querySelector('.fullscreen-container');
-        const coverBackground = document.getElementById('coverBackground');
-        const colorBackground = document.getElementById('colorBackground');
-        
-        if (isPlaying) {
-          clockContainer.classList.remove('active');
-          fullscreenContainer.classList.remove('hidden');
-        } else {
-          clockContainer.classList.add('active');
-          fullscreenContainer.classList.add('hidden');
-          
-          // 获取上一次的封面图片key
-          const lastImageKey = localStorage.getItem('lastImageKey');
-          if (lastImageKey) {
-            // 保持背景图片和颜色不变
-            coverBackground.style.display = 'block';
-            colorBackground.style.display = 'block';
-          }
-        }
-      }
-    </script>
     <style>
       body {
         margin: 0;
         padding: 0;
         overflow: hidden;
-      }
-
-      .fullscreen-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100vh;
-        width: 100vw;
+        background-color: #000;
         position: relative;
-        opacity: 1;
-        transition: opacity 0.5s ease;
+        width: 100vw;
+        height: 100vh;
       }
 
-      .fullscreen-container.hidden {
-        opacity: 0;
-        pointer-events: none;
+      /* 隐藏所有默认的浏览器UI元素 */
+      ::-webkit-scrollbar {
+        display: none;
       }
 
-      #coverImage {
-        width: 99vw;
-        height: auto;
-        max-height: 99vh;
-        object-fit: contain;
-        display: block;
-      }
-
-      /* 移除悬停效果 */
-      @media (hover: hover) {
-        #coverImage:hover {
-          transform: none;
-        }
-      }
-
-      .fullscreen-hint {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 5px;
-        font-size: 14px;
-        pointer-events: none;
-        opacity: 0.8;
-        z-index: 1000;
-      }
-
-      /* 触摸设备的提示样式 */
-      .fullscreen-tip {
-        position: absolute;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-size: 16px;
-        pointer-events: none;
-        opacity: 0.9;
-        z-index: 1000;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        white-space: nowrap;
-        transition: opacity 0.5s ease;
-      }
-
+      /* 背景层 */
       #coverBackground {
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: -1;
-        background-position: center;
-        background-repeat: no-repeat;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
         background-size: cover;
-        filter: blur(20px) opacity(0.3);
+        background-position: center;
+        opacity: 0.2;
+        filter: blur(30px);
+        pointer-events: none;
+        transition: all 0.5s ease;
       }
 
       #colorBackground {
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: -2;
-        transition: background-color 1s ease;
+        width: 100%;
+        height: 100%;
+        z-index: 2;
+        background-color: rgba(0, 0, 0, 0.95);
+        pointer-events: none;
+        transition: all 0.5s ease;
       }
 
-      #exitFullscreen {
+      /* 播放状态容器 */
+      .fullscreen-container {
         position: fixed;
-        top: 20px;
-        right: 20px;
-        background: rgba(0, 0, 0, 0.7);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-radius: 12px;
-        color: white;
-        cursor: pointer;
-        opacity: 0.8;
-        transition: all 0.3s ease;
-        width: 48px;
-        height: 48px;
-        padding: 12px;
-        z-index: 1000;
+        top: 0;
+        left: 0;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        height: 100vh;
+        width: 100vw;
+        z-index: 3;
+        opacity: 1;
+        transition: all 0.5s ease;
       }
 
-      /* 非触摸设备的按钮悬停效果 */
-      @media (hover: hover) {
-        #exitFullscreen:hover {
-          opacity: 1;
-          background: rgba(0, 0, 0, 0.9);
-          border-color: rgba(255, 255, 255, 0.5);
-          transform: scale(1.05);
-        }
+      .fullscreen-container.hidden {
+        opacity: 0;
+        pointer-events: none;
+        visibility: hidden;
       }
 
-      #exitFullscreen svg {
-        width: 24px;
-        height: 24px;
+      #coverImage {
+        width: 100%;
+        height: 100%;
+        max-width: 100vw;
+        max-height: 100vh;
+        object-fit: contain;
+        display: block;
+        pointer-events: none;
+        position: relative;
+        z-index: 4;
+        transition: opacity 0.5s ease;
       }
 
-      /* 按钮和可点击元素基础样式 */
-      button {
-        transition: all 0.3s ease;
-        opacity: 0.8;
+      /* 网格显示相关样式 */
+      .grid-container {
+        --wall-padding: 12px;
+        --grid-gap: 12px;
+        position: fixed;
+        top: 0;
+        left: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(3, 1fr);
+        gap: var(--grid-gap);
+        padding: var(--wall-padding);
+        width: 100vw;
+        height: 100vh;
+        box-sizing: border-box;
+        z-index: 3;
+        opacity: 1;
+        transition: all 0.5s ease;
       }
 
-      /* 非触摸设备的悬停效果 */
-      @media (hover: hover) {
-        button:hover {
-          opacity: 1;
-        }
+      .grid-container.hidden {
+        opacity: 0;
+        pointer-events: none;
+        visibility: hidden;
       }
 
+      .grid-item {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: 8px;
+        background-color: transparent;
+        transform-style: preserve-3d;
+        transition: transform 0.6s;
+      }
+
+      .grid-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        backface-visibility: hidden;
+        border-radius: 8px;
+        transition: opacity 0.3s ease;
+      }
+
+      .grid-item.flip {
+        transform: rotateY(180deg);
+      }
+
+      /* 时钟样式 */
+      .grid-item.clock {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: rgba(0, 0, 0, 0.6);
+        border-radius: 8px;
+        padding: 0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 5;
+        overflow: hidden;
+      }
+
+      .clock-content {
+        text-align: center;
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        width: 90%;
+        height: 90%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        box-sizing: border-box;
+      }
+
+      .clock-content .date {
+        font-size: min(calc(2vw + 1vh), 2.5rem);
+        margin-bottom: 0.3em;
+        opacity: 0.9;
+        font-weight: 300;
+        white-space: nowrap;
+      }
+
+      .clock-content .time {
+        font-size: min(calc(5vw + 3vh), 7rem);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        white-space: nowrap;
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        line-height: 1;
+      }
+
+      .clock-content .time .seconds {
+        font-size: 0.6em;
+        opacity: 0.7;
+        font-weight: 400;
+        margin-left: 0.2em;
+        display: inline-block;
+      }
+
+      /* 等待授权提示 */
       #pairDisabled {
         position: fixed;
         top: 0;
         left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.9);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 2000;
-      }
-
-      .messages {
-        background: rgba(255, 255, 255, 0.1);
-        padding: 30px 50px;
-        border-radius: 15px;
-        text-align: center;
-        color: #fff;
-        font-size: 1.5em;
-        line-height: 1.5;
-        max-width: 80%;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        border: 1px solid rgba(255,255,255,0.1);
-      }
-
-      .messages h2 {
-        margin: 0 0 20px 0;
-        color: #1d99f3;
-      }
-
-      /* 时钟容器样式 */
-      .clock-container {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 10;
-        text-align: center;
-        opacity: 0;
-        transition: opacity 0.5s ease;
-        pointer-events: none;
-        color: #fff;
-        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
         width: 100vw;
         height: 100vh;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(0, 0, 0, 0.9);
+        color: white;
+        z-index: 10;
       }
 
-      .clock-container.active {
-        opacity: 1;
-        pointer-events: auto;
-      }
-
-      .date-container {
+      #pairDisabled .messages {
         text-align: center;
-        margin-bottom: 20px;
         padding: 20px;
-        background: rgba(0, 0, 0, 0.3);
-        border-radius: 15px;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
       }
-        
-      .date {
-        font-size: 2em;
-        margin-bottom: 5px;
-        font-weight: bold;
+
+      #pairDisabled h2 {
+        margin-bottom: 1em;
       }
-        
-      .lunar-date {
-        font-size: 1.5em;
+
+      #pairDisabled p {
+        margin: 0.5em 0;
         opacity: 0.8;
-        font-weight: bold;
-      }
-        
-      .time {
-        font-size: 8em;
-        font-weight: bold;
-      }
-        
-      .seconds {
-        font-size: 0.3em;
-        vertical-align: super;
-        opacity: 0.5;
-        font-weight: bold;
       }
     </style>
   </head>
   <body>
     <div id="coverBackground"></div>
     <div id="colorBackground"></div>
-    <button id="fullscreenButton" aria-label="进入全屏模式">
-      <svg viewBox="0 0 24 24" fill="currentColor">
-        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-      </svg>
-    </button>
 
-    <!-- 添加时钟容器 -->
-    <div class="clock-container">
-      <div class="date-container">
-        <div class="date"></div>
-        <div class="lunar-date"></div>
+    <div id="gridContainer" class="grid-container hidden">
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
+      <div class="grid-item clock">
+        <div class="clock-content">
+          <div class="date"></div>
+          <div class="time"></div>
+        </div>
       </div>
-      <div class="time"></div>
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
+      <div class="grid-item"><img src="/img/transparent.png" alt="Album Cover"></div>
     </div>
 
-    <div class="fullscreen-container">
+    <div id="playingContainer" class="fullscreen-container">
       <img id="coverImage" src="/img/transparent.png" alt="Album Cover">
     </div>
 
-    <div id="pairDisabled" style="display: none;">
+    <div id="pairDisabled">
       <div class="messages">
         <h2>等待 Roon Core 授权</h2>
         <p>请在 Roon Core 设置中启用此扩展</p>
-        <p>设置 → 扩展 → 启用 ArtFrame</p>
+        <p>设置 → 扩展 → 启用 ArtFrameWall</p>
       </div>
     </div>
   </body>

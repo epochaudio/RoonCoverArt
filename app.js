@@ -39,9 +39,9 @@ var options = commandLineArgs(optionDefinitions, { partial: true });
 
 var usage = getUsage([
   {
-    header: "Roon 网页控制",
+    header: "Roon Cover Art",
     content:
-      "Roon Music Player 的网页控制器 .\n\nUsage: {bold node app.js <options>}"
+      "Roon封面艺术.\n\nUsage: {bold node app.js <options>}"
   },
   {
     header: "Options",
@@ -79,6 +79,9 @@ var bodyParser = require("body-parser");
 var app = express();
 app.use(express.static("public"));
 app.use(bodyParser.json());
+
+// 添加 images 目录的静态文件服务
+app.use('/images', express.static('images'));
 
 app.use(function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
@@ -129,9 +132,9 @@ function makelayout(settings) {
 
 // 创建 Roon API 实例
 var roon = new RoonApi({
-    extension_id:        "com.epochaudio.web.controller",
-    display_name:        "ArtFrame",
-    display_version:     "2.1.2",
+    extension_id:        "com.epochaudio.coverart",
+    display_name:        "Cover Art",
+    display_version:     "3.0.1",
     publisher:           "门耳朵制作",
     email:              "masked",
     website:            "https://shop236654229.taobao.com/",
@@ -441,14 +444,37 @@ app.get("/roonapi/getImage", function(req, res) {
     return;
   }
   
+  console.log('收到图片请求:', {
+    image_key: req.query.image_key,
+    albumName: req.query.albumName,
+    artistName: req.query.artistName
+  });
+  
   core.services.RoonApiImage.get_image(
     req.query.image_key,
     { scale: "fit", width: 1080, height: 1080, format: "image/jpeg" },
-    function(cb, contentType, body) {
+    async function(cb, contentType, body) {
       if (!body) {
         console.log('获取图片失败');
         res.status(500).json({ error: '获取图片失败' });
         return;
+      }
+
+      // 检查是否启用了自动保存功能
+      const autoSave = config.has('artwork.autoSave') ? config.get('artwork.autoSave') : true;
+      console.log('自动保存状态:', {
+        autoSave,
+        hasAlbumName: !!req.query.albumName,
+        hasArtistName: !!req.query.artistName
+      });
+      
+      if (autoSave && req.query.albumName) {
+        try {
+          console.log('开始保存专辑封面:', req.query.albumName);
+          await saveArtwork(body, req.query.albumName, req.query.artistName);
+        } catch (error) {
+          console.error('保存专辑封面时出错:', error);
+        }
       }
       
       res.contentType = contentType;
@@ -503,3 +529,81 @@ app.use(
   "/js-cookie/js.cookie.js",
   express.static(__dirname + "/node_modules/js-cookie/src/js.cookie.js")
 );
+
+// 添加状态查看路由
+app.get("/roonapi/artworkStatus", async function(req, res) {
+  try {
+    const saveDir = config.has('artwork.saveDir') 
+      ? config.get('artwork.saveDir') 
+      : './images';
+    
+    const stats = await getImageStats(saveDir);
+    res.json({
+      enabled: config.has('artwork.autoSave') ? config.get('artwork.autoSave') : true,
+      saveDir: saveDir,
+      ...stats
+    });
+  } catch (error) {
+    console.error('获取状态失败:', error);
+    res.status(500).json({ error: '获取状态失败' });
+  }
+});
+
+// 添加获取图片列表的路由
+app.get("/api/images", async function(req, res) {
+  try {
+    const saveDir = config.has('artwork.saveDir') ? config.get('artwork.saveDir') : './images';
+    const files = await fs.readdir(saveDir);
+    const imageFiles = files.filter(file => /\.(jpg|jpeg|png)$/i.test(file));
+    res.json(imageFiles);
+  } catch (error) {
+    console.error('获取图片列表失败:', error);
+    res.status(500).json({ error: '获取图片列表失败' });
+  }
+});
+
+const fs = require('fs').promises;
+const path = require('path');
+
+async function saveArtwork(imageData, albumName, artistName) {
+    try {
+        const saveDir = config.has('artwork.saveDir') ? config.get('artwork.saveDir') : './images';
+        const format = config.has('artwork.format') ? config.get('artwork.format') : 'jpg';
+        
+        // 确保目录存在
+        await fs.mkdir(saveDir, { recursive: true });
+        
+        // 清理文件名
+        const safeAlbumName = albumName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const safeArtistName = artistName ? artistName.replace(/[^a-z0-9]/gi, '_').toLowerCase() : '';
+        const fileName = safeArtistName 
+            ? `${safeAlbumName}_by_${safeArtistName}.${format}`
+            : `${safeAlbumName}.${format}`;
+        const filePath = path.join(saveDir, fileName);
+        
+        // 保存文件
+        await fs.writeFile(filePath, imageData);
+        console.log(`保存专辑封面: ${fileName}`);
+        
+    } catch (error) {
+        console.error('保存专辑封面失败:', error);
+        throw error;
+    }
+}
+
+async function getImageStats(directory) {
+    try {
+        await fs.mkdir(directory, { recursive: true });
+        const files = await fs.readdir(directory);
+        const imageFiles = files.filter(file => /\.(jpg|jpeg|png)$/i.test(file));
+        
+        return {
+            totalImages: imageFiles.length,
+            lastSaved: imageFiles.length > 0 ? 
+                (await fs.stat(path.join(directory, imageFiles[imageFiles.length - 1]))).mtime : null
+        };
+    } catch (error) {
+        console.error('获取图片统计信息失败:', error);
+        throw error;
+    }
+}
