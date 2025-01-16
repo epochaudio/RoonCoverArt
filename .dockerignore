@@ -32,4 +32,7 @@ LICENSE
 
 # 开发和调试文件
 .DS_Store
-.cursorrules 
+.cursorrules
+
+# 图片目录
+images/ 
