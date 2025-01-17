@@ -30,3 +30,6 @@ build/
 
 # Application specific
 images/ images_backup/
+
+images/
+images_backup/

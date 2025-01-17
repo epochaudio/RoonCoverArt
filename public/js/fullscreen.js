@@ -25,46 +25,66 @@ const css = {
   colorBackground: '#000000'
 };
 
-// 图片加载优化函数
-function loadImage(url) {
-    if (imageCache.has(url)) {
-        console.log('从缓存加载图片:', url);
-        return Promise.resolve(imageCache.get(url));
+// 图片加载和缓存管理
+class ImageLoader {
+    constructor() {
+        this.imagePool = new Map();
+        this.maxPoolSize = 30;  // 最大缓存数量
+        this.loadTimeout = 10000;  // 10秒超时
     }
 
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        const timeout = setTimeout(() => {
-            img.src = '';
-            reject(new Error('图片加载超时'));
-        }, IMAGE_TIMEOUT);
+    loadImage(url) {
+        if (this.imagePool.has(url)) {
+            console.log('从缓存加载图片:', url);
+            return Promise.resolve(this.imagePool.get(url));
+        }
 
-        img.onload = () => {
-            clearTimeout(timeout);
-            imageCache.set(url, img);
-            cleanImagePool();
-            resolve(img);
-        };
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            const timeout = setTimeout(() => {
+                img.src = '';
+                reject(new Error('图片加载超时'));
+            }, this.loadTimeout);
 
-        img.onerror = () => {
-            clearTimeout(timeout);
-            reject(new Error(`加载图片失败: ${url}`));
-        };
+            img.onload = () => {
+                clearTimeout(timeout);
+                this.imagePool.set(url, img);
+                this.cleanImagePool();
+                resolve(img);
+            };
 
-        img.src = url;
-    });
+            img.onerror = () => {
+                clearTimeout(timeout);
+                reject(new Error(`加载图片失败: ${url}`));
+            };
+
+            img.src = url;
+        });
+    }
+
+    cleanImagePool() {
+        if (this.imagePool.size > this.maxPoolSize) {
+            console.log('清理图片缓存池');
+            const entries = Array.from(this.imagePool.entries());
+            const toRemove = entries.slice(0, entries.length - this.maxPoolSize);
+            toRemove.forEach(([url]) => {
+                console.log('从缓存池移除:', url);
+                this.imagePool.delete(url);
+            });
+        }
+    }
 }
 
-// 清理图片缓存池
-function cleanImagePool() {
-    if (imageCache.size > maxPoolSize) {
-        console.log('清理图片缓存池');
-        const entries = Array.from(imageCache.entries());
-        const toRemove = entries.slice(0, entries.length - maxPoolSize);
-        toRemove.forEach(([url]) => {
-            console.log('从缓存池移除:', url);
-            imageCache.delete(url);
-        });
+// 创建全局图片加载器实例
+const imageLoader = new ImageLoader();
+
+// 修改现有的图片加载相关函数
+async function loadImage(url) {
+    try {
+        return await imageLoader.loadImage(url);
+    } catch (error) {
+        console.error('图片加载失败:', error);
+        throw error;
     }
 }
 
@@ -80,7 +100,7 @@ function monitorMemory() {
 
         if (memory.usedJSHeapSize / memory.jsHeapSizeLimit > 0.8) {
             console.log('内存使用过高，开始清理');
-            cleanImagePool();
+            imageLoader.cleanImagePool();
         }
     }
 }
@@ -88,7 +108,7 @@ function monitorMemory() {
 // 错误恢复机制
 function attemptRecovery() {
     console.log('开始执行恢复程序');
-    cleanImagePool();
+    imageLoader.cleanImagePool();
     if (updateInterval) {
         clearInterval(updateInterval);
         updateInterval = null;
@@ -160,11 +180,20 @@ function toggleDisplayMode(isPlaying) {
     const gridContainer = document.getElementById('gridContainer');
     const playingContainer = document.getElementById('playingContainer');
     
+    if (!gridContainer || !playingContainer) {
+        console.error('找不到必要的DOM元素:', {
+            gridContainer: !!gridContainer,
+            playingContainer: !!playingContainer
+        });
+        return;
+    }
+    
     if (isPlaying) {
         console.log('切换到播放显示模式');
         gridContainer.classList.add('hidden');
         playingContainer.classList.remove('hidden');
         if (updateInterval) {
+            console.log('清除网格更新定时器');
             clearInterval(updateInterval);
             updateInterval = null;
         }
@@ -172,6 +201,7 @@ function toggleDisplayMode(isPlaying) {
         console.log('切换到网格显示模式');
         playingContainer.classList.add('hidden');
         gridContainer.classList.remove('hidden');
+        console.log('初始化网格显示');
         initializeGridDisplay();
     }
 }
@@ -183,87 +213,96 @@ async function initializeGridDisplay() {
     }
 
     try {
-        console.log('开始获取图片列表');
-        const response = await fetch('/api/images');
-        if (!response.ok) {
-            throw new Error('获取图片列表失败');
-        }
-        const images = await response.json();
-        console.log('获取到的图片列表:', images);
-        
-        if (images.length === 0) {
-            console.log('没有可用的图片');
-            return;
-        }
-        
-        // 获取所有非时钟格子的图片元素
-        const gridItems = document.querySelectorAll('.grid-item:not(.clock) img');
-        console.log('找到的网格图片元素数量:', gridItems.length);
-        
-        // 随机选择8张不重复的图片
-        const selectedImages = [];
-        const usedIndices = new Set();
-        
-        while (selectedImages.length < 8 && usedIndices.size < images.length) {
-            const randomIndex = Math.floor(Math.random() * images.length);
-            if (!usedIndices.has(randomIndex)) {
-                usedIndices.add(randomIndex);
-                selectedImages.push(images[randomIndex]);
-            }
-        }
-        
-        // 将选中的图片应用到网格
-        const loadPromises = Array.from(gridItems).map(async (img, index) => {
-            try {
-                if (index < selectedImages.length) {
-                    const imageUrl = `/images/${selectedImages[index]}`;
-                    console.log('加载图片:', imageUrl);
-                    const loadedImg = await loadImage(imageUrl);
-                    img.src = loadedImg.src;
-                } else {
-                    img.src = '/img/transparent.png';
-                }
-            } catch (error) {
-                console.error('加载图片失败:', error);
-                img.src = '/img/transparent.png';
-            }
-        });
-
-        await Promise.all(loadPromises);
-        updateInterval = setInterval(updateRandomImages, GRID_UPDATE_INTERVAL);
-        console.log('设置了定时更新，间隔:', GRID_UPDATE_INTERVAL);
-        setInterval(monitorMemory, 60000);
+        await updateGridImages();
+        // 设置60秒更新间隔
+        updateInterval = setInterval(updateRandomImages, 60000);
+        console.log('设置了定时更新，间隔: 60秒');
     } catch (error) {
         console.error('初始化网格显示失败:', error);
         attemptRecovery();
     }
 }
 
+async function updateGridImages() {
+    console.log('开始获取图片列表');
+    const response = await fetch('/api/images');
+    if (!response.ok) {
+        throw new Error('获取图片列表失败');
+    }
+    const images = await response.json();
+    console.log('获取到的图片列表:', images);
+    
+    if (images.length === 0) {
+        console.log('没有可用的图片');
+        return;
+    }
+    
+    const gridItems = document.querySelectorAll('.grid-item:not(.clock) img');
+    console.log('找到的网格图片元素数量:', gridItems.length);
+    
+    const selectedImages = [];
+    const usedIndices = new Set();
+    
+    while (selectedImages.length < 8 && usedIndices.size < images.length) {
+        const randomIndex = Math.floor(Math.random() * images.length);
+        if (!usedIndices.has(randomIndex)) {
+            usedIndices.add(randomIndex);
+            selectedImages.push(images[randomIndex]);
+        }
+    }
+    
+    const loadPromises = Array.from(gridItems).map(async (img, index) => {
+        try {
+            if (index < selectedImages.length) {
+                const imageUrl = `/images/${selectedImages[index]}`;
+                console.log('加载图片:', imageUrl);
+                const loadedImg = await loadImage(imageUrl);
+                img.src = loadedImg.src;
+            } else {
+                img.src = '/img/transparent.png';
+            }
+        } catch (error) {
+            console.error('加载图片失败:', error);
+            img.src = '/img/transparent.png';
+        }
+    });
+
+    await Promise.all(loadPromises);
+}
+
 async function updateRandomImages() {
+    console.log('开始随机更新图片...');
     try {
         const response = await fetch('/api/images');
         if (!response.ok) {
             throw new Error('获取图片列表失败');
         }
         const images = await response.json();
+        console.log('可用图片总数:', images.length);
         if (images.length === 0) return;
 
         // 获取当前显示的所有图片
         const gridImages = Array.from(document.querySelectorAll('.grid-item:not(.clock) img'));
+        console.log('网格图片元素数量:', gridImages.length);
+        
         const currentImages = gridImages.map(img => {
             const path = img.src.split('/').pop();
             return path === 'transparent.png' ? null : path;
         });
+        console.log('当前显示的图片:', currentImages);
 
-        // 选择3个不同位置进行更新
-        const positions = Array.from({ length: gridImages.length }, (_, i) => i);
+        // 随机选择3个不同位置进行更新
+        const positions = Array.from({ length: gridImages.length }, (_, i) => i)
+            .filter(i => !gridImages[i].closest('.clock')); // 排除时钟位置
+        
         const updatePositions = [];
-        for (let i = 0; i < IMAGES_TO_UPDATE && positions.length > 0; i++) {
+        for (let i = 0; i < 3 && positions.length > 0; i++) {
             const randomIndex = Math.floor(Math.random() * positions.length);
             updatePositions.push(positions.splice(randomIndex, 1)[0]);
         }
+        console.log('将要更新的位置:', updatePositions);
 
-        // 为每个位置选择一个新图片（避免重复）
+        // 为每个位置选择一个新图片
         for (const position of updatePositions) {
             const imgElement = gridImages[position];
             const gridItem = imgElement.parentElement;
@@ -275,7 +314,10 @@ async function updateRandomImages() {
                 newImage = images[randomIndex];
             } while (currentImages.includes(newImage));
             
+            console.log(`位置 ${position} 将更新为:`, newImage);
+            
             // 应用3D翻转效果
+            console.log(`对位置 ${position} 应用翻转效果`);
             gridItem.classList.add('flip');
             
             const imageUrl = `/images/${newImage}`;
@@ -285,20 +327,21 @@ async function updateRandomImages() {
                 currentImages[position] = newImage;
                 // 应用新图片
                 setTimeout(() => {
+                    console.log(`位置 ${position} 更新图片`);
                     imgElement.src = loadedImg.src;
                     setTimeout(() => {
+                        console.log(`位置 ${position} 移除翻转效果`);
                         gridItem.classList.remove('flip');
                     }, 300);
                 }, 300);
             } catch (error) {
-                console.error('更新图片失败:', error);
+                console.error(`位置 ${position} 更新失败:`, error);
                 imgElement.src = '/img/transparent.png';
                 gridItem.classList.remove('flip');
             }
         }
     } catch (error) {
         console.error('更新随机图片失败:', error);
-        attemptRecovery();
     }
 }
 
@@ -313,13 +356,37 @@ function updateImage(imageKey, albumName) {
         return;
     }
 
+    // 检查DOM元素
+    const coverImage = $('#coverImage');
+    const coverBackground = $('#coverBackground');
+    const colorBackground = $('#colorBackground');
+
+    console.log('DOM元素状态:', {
+        coverImage: coverImage.length ? '存在' : '不存在',
+        coverBackground: coverBackground.length ? '存在' : '不存在',
+        colorBackground: colorBackground.length ? '存在' : '不存在'
+    });
+
     const imageUrl = '/roonapi/getImage?image_key=' + imageKey + 
         '&albumName=' + encodeURIComponent(albumName || '') +
         '&scale=full&format=image/jpeg&quality=100';
     console.log('图片URL:', imageUrl);
     
-    $('#coverImage').attr('src', imageUrl);
-    $('#coverBackground').css({
+    // 测试图片URL是否可访问
+    fetch(imageUrl)
+        .then(response => {
+            console.log('图片请求状态:', response.status, response.ok);
+            return response.blob();
+        })
+        .then(blob => {
+            console.log('成功获取图片数据，大小:', blob.size);
+        })
+        .catch(error => {
+            console.error('图片请求失败:', error);
+        });
+    
+    coverImage.attr('src', imageUrl);
+    coverBackground.css({
         'background-image': `url(${imageUrl})`,
         'opacity': '0.2',
         'filter': 'blur(30px)',
@@ -330,13 +397,22 @@ function updateImage(imageKey, albumName) {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
     img.onload = function() {
-        const dominantColor = colorThief.getColor(img);
-        const [r, g, b] = dominantColor;
-        const backgroundColor = `rgba(${r}, ${g}, ${b}, 0.95)`;
-        $('#colorBackground').css({
-            'background': backgroundColor,
-            'transition': 'background 1s ease'
-        }).show();
+        console.log('图片加载完成，开始提取颜色');
+        try {
+            const dominantColor = colorThief.getColor(img);
+            console.log('提取的主色调:', dominantColor);
+            const [r, g, b] = dominantColor;
+            const backgroundColor = `rgba(${r}, ${g}, ${b}, 0.95)`;
+            colorBackground.css({
+                'background': backgroundColor,
+                'transition': 'background 1s ease'
+            }).show();
+        } catch (error) {
+            console.error('提取颜色失败:', error);
+        }
+    };
+    img.onerror = function(error) {
+        console.error('图片加载失败:', error);
     };
     img.src = imageUrl;
 }
@@ -392,7 +468,16 @@ socket.on('zoneStatus', function(payload) {
         }
         
         const zone = payload.find(z => z.zone_id === settings.zoneID) || payload[0];
-        console.log('当前zone:', zone);
+        console.log('当前zone详细信息:', {
+            zone_id: zone.zone_id,
+            display_name: zone.display_name,
+            now_playing: zone.now_playing ? {
+                image_key: zone.now_playing.image_key,
+                three_line: zone.now_playing.three_line,
+                album: zone.now_playing.album
+            } : '无播放信息'
+        });
+
         if (zone.now_playing && zone.now_playing.image_key !== currentImageKey) {
             const nowPlaying = zone.now_playing;
             console.log('更新图片key:', nowPlaying.image_key);
@@ -416,7 +501,12 @@ socket.on('zoneStatus', function(payload) {
                 console.warn('警告：无法获取专辑名称，完整数据:', nowPlaying);
                 updateImage(currentImageKey);
             }
+            
+            // 确保显示模式正确
+            toggleDisplayMode(true);
         }
+    } else {
+        console.log('未收到区域信息或区域列表为空');
     }
 });
 
@@ -430,44 +520,24 @@ socket.on('notPlaying', function(data) {
         
         console.log('设置15秒切换定时器');
         playbackTimer = setTimeout(() => {
-            console.log('切换到网格显示');
+            console.log('15秒已到，切换到网格显示');
             toggleDisplayMode(false);
-        }, 15000);
+        }, 15000); // 15秒后切换到网格显示
     } catch (error) {
         console.error('处理非播放状态事件时出错:', error);
     }
 });
 
 socket.on('nowplaying', function(data) {
-    console.log('收到开始播放事件:', {
-        完整数据: data,
-        播放状态: data.state,
-        图片Key: data.image_key,
-        三行信息: data.three_line,
-        其他元数据: {
-            艺术家: data.artist,
-            专辑: data.album,
-            标题: data.title
-        }
-    });
+    console.log('收到开始播放事件:', data);
     
     try {
         if (data && data.image_key) {
-            console.log('保存封面key到localStorage:', data.image_key);
-            localStorage.setItem('lastImageKey', data.image_key);
+            console.log('更新当前播放封面');
             currentImageKey = data.image_key;
             
             // 获取专辑名称
             const albumName = data.three_line?.line3 || data.album;
-            
-            console.log('专辑信息:', {
-                albumName,
-                来源: data.three_line?.line3 ? 'three_line.line3' : 'album字段',
-                原始数据: {
-                    three_line: data.three_line,
-                    album: data.album
-                }
-            });
             
             if (albumName) {
                 updateImage(data.image_key, albumName);
@@ -475,9 +545,12 @@ socket.on('nowplaying', function(data) {
                 console.warn('警告：无法获取专辑名称，完整数据:', data);
                 updateImage(data.image_key);
             }
+            
+            // 立即切换到播放显示模式
             toggleDisplayMode(true);
         }
         
+        // 清除任何现有的切换定时器
         if (playbackTimer) {
             console.log('取消切换定时器');
             clearTimeout(playbackTimer);

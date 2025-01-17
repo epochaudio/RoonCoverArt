@@ -77,7 +77,13 @@ var http = require("http");
 var bodyParser = require("body-parser");
 
 var app = express();
-app.use(express.static("public"));
+app.use(express.static("public", {
+    setHeaders: function(res, path) {
+        if (path.endsWith('.js')) {
+            res.set('Content-Type', 'application/javascript');
+        }
+    }
+}));
 app.use(bodyParser.json());
 
 // 添加 images 目录的静态文件服务
@@ -134,7 +140,7 @@ function makelayout(settings) {
 var roon = new RoonApi({
     extension_id:        "com.epochaudio.coverart",
     display_name:        "Cover Art",
-    display_version:     "3.0.2",
+    display_version:     "3.0.5",
     publisher:           "门耳朵制作",
     email:              "masked",
     website:            "https://shop236654229.taobao.com/",
@@ -582,6 +588,42 @@ app.get("/api/images", async function(req, res) {
     console.error('获取图片列表失败:', error);
     res.status(500).json({ error: '获取图片列表失败' });
   }
+});
+
+app.get("/api/status", function(req, res) {
+    if (!core || !transport) {
+        res.status(500).json({ error: "未连接到 Roon Core" });
+        return;
+    }
+
+    // 如果有选定的区域，返回其状态
+    if (settings.output) {
+        const zone = zoneStatus.find(z => 
+            z.outputs.some(o => o.output_id === settings.output.output_id)
+        );
+        
+        if (zone && zone.state === "playing" && zone.now_playing) {
+            res.json({
+                is_playing: true,
+                ...zone.now_playing
+            });
+            return;
+        }
+    }
+    
+    res.json({ is_playing: false });
+});
+
+app.get("/api/pair", function(req, res) {
+    res.json({ pairEnabled: pairStatus });
+});
+
+app.get("/api/zones", function(req, res) {
+    if (!core || !transport) {
+        res.status(500).json({ error: "未连接到 Roon Core" });
+        return;
+    }
+    res.json(zoneStatus);
 });
 
 const fs = require('fs').promises;
