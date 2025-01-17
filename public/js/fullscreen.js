@@ -237,33 +237,45 @@ async function updateGridImages() {
         return;
     }
     
-    const gridItems = document.querySelectorAll('.grid-item:not(.clock) img');
-    console.log('找到的网格图片元素数量:', gridItems.length);
+    const gridItems = document.querySelectorAll('.grid-item:not(.clock)');
+    console.log('找到的网格元素数量:', gridItems.length);
     
     const selectedImages = [];
     const usedIndices = new Set();
     
-    while (selectedImages.length < 8 && usedIndices.size < images.length) {
+    while (selectedImages.length < 8) {
         const randomIndex = Math.floor(Math.random() * images.length);
         if (!usedIndices.has(randomIndex)) {
             usedIndices.add(randomIndex);
             selectedImages.push(images[randomIndex]);
         }
+        if (usedIndices.size === images.length && selectedImages.length < 8) {
+            usedIndices.clear();
+        }
     }
     
-    const loadPromises = Array.from(gridItems).map(async (img, index) => {
+    const loadPromises = Array.from(gridItems).map(async (gridItem, index) => {
         try {
             if (index < selectedImages.length) {
                 const imageUrl = `/images/${selectedImages[index]}`;
                 console.log('加载图片:', imageUrl);
                 const loadedImg = await loadImage(imageUrl);
-                img.src = loadedImg.src;
+                const frontImg = gridItem.querySelector('.front');
+                const backImg = gridItem.querySelector('.back');
+                if (frontImg) frontImg.src = loadedImg.src;
+                if (backImg) backImg.src = '/img/transparent.png';
             } else {
-                img.src = '/img/transparent.png';
+                const frontImg = gridItem.querySelector('.front');
+                const backImg = gridItem.querySelector('.back');
+                if (frontImg) frontImg.src = '/img/transparent.png';
+                if (backImg) backImg.src = '/img/transparent.png';
             }
         } catch (error) {
             console.error('加载图片失败:', error);
-            img.src = '/img/transparent.png';
+            const frontImg = gridItem.querySelector('.front');
+            const backImg = gridItem.querySelector('.back');
+            if (frontImg) frontImg.src = '/img/transparent.png';
+            if (backImg) backImg.src = '/img/transparent.png';
         }
     });
 
@@ -282,18 +294,19 @@ async function updateRandomImages() {
         if (images.length === 0) return;
 
         // 获取当前显示的所有图片
-        const gridImages = Array.from(document.querySelectorAll('.grid-item:not(.clock) img'));
-        console.log('网格图片元素数量:', gridImages.length);
+        const gridItems = document.querySelectorAll('.grid-item:not(.clock)');
+        console.log('网格图片元素数量:', gridItems.length);
         
-        const currentImages = gridImages.map(img => {
-            const path = img.src.split('/').pop();
+        const currentImages = Array.from(gridItems).map(item => {
+            const frontImg = item.querySelector('.front');
+            const path = frontImg.src.split('/').pop();
             return path === 'transparent.png' ? null : path;
         });
         console.log('当前显示的图片:', currentImages);
 
         // 随机选择3个不同位置进行更新
-        const positions = Array.from({ length: gridImages.length }, (_, i) => i)
-            .filter(i => !gridImages[i].closest('.clock')); // 排除时钟位置
+        const positions = Array.from({ length: gridItems.length }, (_, i) => i)
+            .filter(i => !gridItems[i].closest('.clock')); // 排除时钟位置
         
         const updatePositions = [];
         for (let i = 0; i < 3 && positions.length > 0; i++) {
@@ -302,11 +315,8 @@ async function updateRandomImages() {
         }
         console.log('将要更新的位置:', updatePositions);
 
-        // 为每个位置选择一个新图片
-        for (const position of updatePositions) {
-            const imgElement = gridImages[position];
-            const gridItem = imgElement.parentElement;
-            
+        // 为每个位置选择一个新图片并预加载
+        const updates = await Promise.all(updatePositions.map(async position => {
             // 选择一个不在当前显示列表中的图片
             let newImage;
             do {
@@ -314,31 +324,53 @@ async function updateRandomImages() {
                 newImage = images[randomIndex];
             } while (currentImages.includes(newImage));
             
-            console.log(`位置 ${position} 将更新为:`, newImage);
-            
-            // 应用3D翻转效果
-            console.log(`对位置 ${position} 应用翻转效果`);
-            gridItem.classList.add('flip');
-            
             const imageUrl = `/images/${newImage}`;
             try {
                 const loadedImg = await loadImage(imageUrl);
-                // 更新当前图片列表
-                currentImages[position] = newImage;
-                // 应用新图片
-                setTimeout(() => {
-                    console.log(`位置 ${position} 更新图片`);
-                    imgElement.src = loadedImg.src;
-                    setTimeout(() => {
-                        console.log(`位置 ${position} 移除翻转效果`);
-                        gridItem.classList.remove('flip');
-                    }, 300);
-                }, 300);
+                return { position, newImage, loadedImg };
             } catch (error) {
-                console.error(`位置 ${position} 更新失败:`, error);
-                imgElement.src = '/img/transparent.png';
-                gridItem.classList.remove('flip');
+                console.error(`位置 ${position} 预加载失败:`, error);
+                return { position, error: true };
             }
+        }));
+
+        // 依次执行翻转动画
+        for (let i = 0; i < updates.length; i++) {
+            const update = updates[i];
+            if (update.error) continue;
+
+            const gridItem = gridItems[update.position];
+            const backImg = gridItem.querySelector('.back');
+            
+            // 等待前一张图片的动画完成（3秒间隔）
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+            
+            console.log(`位置 ${update.position} 将更新为:`, update.newImage);
+            
+            // 先更新背面的图片
+            backImg.src = update.loadedImg.src;
+            
+            // 执行翻转动画
+            console.log(`对位置 ${update.position} 应用翻转效果`);
+            gridItem.classList.add('flip');
+            
+            // 更新当前图片列表
+            currentImages[update.position] = update.newImage;
+            
+            // 等待翻转动画完成
+            await new Promise(resolve => {
+                setTimeout(() => {
+                    // 翻转完成后，交换前后图片
+                    const frontImg = gridItem.querySelector('.front');
+                    frontImg.src = update.loadedImg.src;
+                    backImg.src = '/img/transparent.png';
+                    // 重置翻转状态
+                    gridItem.classList.remove('flip');
+                    resolve();
+                }, 600); // 与 CSS transition 时间相匹配
+            });
         }
     } catch (error) {
         console.error('更新随机图片失败:', error);
