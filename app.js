@@ -194,11 +194,18 @@ var roon = new RoonApi({
                                     changed.outputs.some(o => o.output_id === settings.output.output_id)) {
                                     // 发送播放状态更新
                                     if (changed.state === "playing" && changed.now_playing) {
-                                        io.emit("nowplaying", {
+                                        console.log('播放信息:', {
                                             image_key: changed.now_playing.image_key,
+                                            three_line: changed.now_playing.three_line,
+                                            state: changed.state,
+                                            raw: changed.now_playing
+                                        });
+                                        io.emit("nowplaying", {
+                                            ...changed.now_playing,  // 传递完整的 now_playing 信息
                                             state: "playing"
                                         });
                                     } else if (changed.state !== "playing") {
+                                        console.log('非播放状态:', changed.state);
                                         io.emit("notPlaying", { state: changed.state });
                                     }
                                     io.emit("zoneStatus", [changed]);

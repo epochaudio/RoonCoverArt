@@ -398,16 +398,23 @@ socket.on('zoneStatus', function(payload) {
             console.log('更新图片key:', nowPlaying.image_key);
             currentImageKey = nowPlaying.image_key;
             
-            // 只获取专辑名
-            const albumName = nowPlaying.three_line && nowPlaying.three_line.line3;
+            // 获取专辑名称
+            const albumName = nowPlaying.three_line?.line3 || nowPlaying.album;
             
             console.log('专辑信息:', {
                 albumName,
-                raw: nowPlaying.three_line
+                来源: nowPlaying.three_line?.line3 ? 'three_line.line3' : 'album字段',
+                原始数据: {
+                    three_line: nowPlaying.three_line,
+                    album: nowPlaying.album
+                }
             });
             
             if (albumName) {
                 updateImage(currentImageKey, albumName);
+            } else {
+                console.warn('警告：无法获取专辑名称，完整数据:', nowPlaying);
+                updateImage(currentImageKey);
             }
         }
     }
@@ -432,23 +439,41 @@ socket.on('notPlaying', function(data) {
 });
 
 socket.on('nowplaying', function(data) {
-    console.log('收到开始播放事件:', data);
+    console.log('收到开始播放事件:', {
+        完整数据: data,
+        播放状态: data.state,
+        图片Key: data.image_key,
+        三行信息: data.three_line,
+        其他元数据: {
+            艺术家: data.artist,
+            专辑: data.album,
+            标题: data.title
+        }
+    });
+    
     try {
         if (data && data.image_key) {
             console.log('保存封面key到localStorage:', data.image_key);
             localStorage.setItem('lastImageKey', data.image_key);
             currentImageKey = data.image_key;
             
-            // 只获取专辑名
-            const albumName = data.three_line && data.three_line.line3;
+            // 获取专辑名称
+            const albumName = data.three_line?.line3 || data.album;
             
             console.log('专辑信息:', {
                 albumName,
-                raw: data.three_line
+                来源: data.three_line?.line3 ? 'three_line.line3' : 'album字段',
+                原始数据: {
+                    three_line: data.three_line,
+                    album: data.album
+                }
             });
             
             if (albumName) {
                 updateImage(data.image_key, albumName);
+            } else {
+                console.warn('警告：无法获取专辑名称，完整数据:', data);
+                updateImage(data.image_key);
             }
             toggleDisplayMode(true);
         }
