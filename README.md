@@ -6,33 +6,26 @@
 
 1. **实时播放显示**
    - 显示当前播放曲目的专辑封面
-   - 自动提取封面主色调作为背景色
-   - 支持全屏显示
-   - 双击页面任意位置进入全屏模式（按 ESC 退出）
-   - 高性能图片切换，支持4K高清显示（2160x2160）
-   - 优化的交叉淡入淡出过渡效果
+   - 使用等比缩放适配方形画屏
+   - 向浏览器 Media Session 提供标准和 4K 封面元数据
 
 2. **艺术墙模式**
-   - 在停止播放15秒后自动切换到艺术墙模式
-   - 4x4网格布局展示（16个位置）
-      - 每60秒自动更新多张图片
-      - 优化布局：20px网格间距和外边距，最大化图片显示区域
-   - 优化的书页翻转动画效果（从右向左）
-   - 支持多图片连续翻转的视觉体验
+   - 暂停或停止播放 15 秒后自动切换到艺术墙
+   - 使用 4x4 网格展示 16 张已保存封面
+   - 每 120 秒随机更新 3 个位置
+   - 使用淡入淡出切换并预加载图片
 
 3. **专用画屏优化**
-   - 针对22寸竖屏（1920x1920）专门优化
-   - 支持7x24小时稳定运行
-   - 智能图片缓存管理
-   - 性能监控和内存优化
-   - 防止屏幕保护程序激活
+   - 面向 1920x1920 等方形显示设备
+   - 页面固定全屏布局并隐藏鼠标指针
+   - 浏览器端最多缓存 25 张已加载图片
 
 4. **自动保存功能**
    - 自动保存播放过的专辑封面
    - 支持自定义保存目录
-   - 智能文件命名（使用image_key和专辑名）
-   - 避免重复保存相同图片
-   - 支持JPG/PNG格式配置
+   - 使用专辑名生成文件名
+   - 使用内容哈希避免重复写入
+   - 支持 JPG/PNG 格式配置
 
 5. **键盘快捷键控制**
    - 浏览器页面获得焦点时支持快捷键控制
@@ -62,10 +55,10 @@
 
 - https://hub.docker.com/r/epochaudio/coverart/tags
 
-推荐方式：先拉取官方镜像，再按文档使用 `docker compose` 或 `docker run` 启动。生产部署建议固定版本 `3.1.7`：
+推荐方式：先拉取官方镜像，再按文档使用 `docker compose` 或 `docker run` 启动。生产部署建议固定版本 `3.1.8`：
 
 ```bash
-docker pull epochaudio/coverart:3.1.7
+docker pull epochaudio/coverart:3.1.8
 # 或始终使用最新标签
 docker pull epochaudio/coverart:latest
 ```
@@ -86,7 +79,7 @@ docker run -d \
   -v $(pwd)/config.json:/app/config.json \
   -v $(pwd)/config/local.json:/app/config/local.json:ro \
   -v $(pwd)/images:/app/images \
-  epochaudio/coverart:3.1.7
+  epochaudio/coverart:3.1.8
 ```
 
 `config.json` 用于保存 Roon 授权/配对状态，属于本地运行态文件，不应提交到 Git。
@@ -106,7 +99,7 @@ docker run -d \
   -v $(pwd)/config.json:/app/config.json \
   -v $(pwd)/config/local.json:/app/config/local.json:ro \
   -v $(pwd)/images:/app/images \
-  epochaudio/coverart:3.1.7
+  epochaudio/coverart:3.1.8
 ```
 
 如果宿主机没有 `input` 组，或 `/dev/input/event*` 是 `root:root` 且权限为 `0600`，上面的 `--group-add` 不会生效。此时可让容器以 root 用户读取只读输入设备：
@@ -124,14 +117,14 @@ docker run -d \
   -v $(pwd)/config.json:/app/config.json \
   -v $(pwd)/config/local.json:/app/config/local.json:ro \
   -v $(pwd)/images:/app/images \
-  epochaudio/coverart:3.1.7
+  epochaudio/coverart:3.1.8
 ```
 
 #### Docker Compose 简化版：
 ```yaml
 services:
   coverart:
-    image: ${COVERART_IMAGE:-epochaudio/coverart:3.1.7}
+    image: ${COVERART_IMAGE:-epochaudio/coverart:3.1.8}
     container_name: roon-coverart
     init: true
     pull_policy: missing
@@ -338,6 +331,14 @@ PORT=3000 npm start
 ```
 
 ## 更新记录
+
+### 3.1.8 (2026-07-16) 代码清理与稳定性修复
+- 修复封面索引并发覆盖、zone 回退控制错位和容器退出流程
+- 移除未加载的旧入口、旧前端资源、jQuery 和无效内存/时钟逻辑
+- 精简浏览器键盘控制、Express 中间件和重复 Roon zone 缓存
+- 升级生产依赖并将安全审计结果收敛到 0 个漏洞
+- Roon 扩展上报版本和 Docker 默认镜像标签升级到 3.1.8
+- Docker 构建升级到 Node.js 24 LTS，并增加依赖缓存
 
 ### 3.1.7 (2026-05-09) 宿主机键盘音量控制
 - 宿主机物理键新增音量控制：`KEY_VOLUMEUP`、`KEY_VOLUMEDOWN`、`KEY_MUTE`

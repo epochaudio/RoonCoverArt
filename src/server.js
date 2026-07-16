@@ -2,7 +2,6 @@
 
 const express = require('express');
 const http = require('http');
-const bodyParser = require('body-parser');
 const path = require('path');
 const config = require('config');
 const socketIO = require('socket.io');
@@ -32,19 +31,10 @@ const io = socketIO(server, {
 });
 
 // Middleware
-app.use(bodyParser.json());
-app.use(express.static('public', {
-    setHeaders: (res, path) => {
-        if (path.endsWith('.js')) {
-            res.set('Content-Type', 'application/javascript');
-        }
-    }
-}));
-app.use('/images', express.static('images'));
-
-// Legacy Node Modules mappings
-app.use("/jquery", express.static(path.join(__dirname, "../node_modules/jquery/dist")));
-app.use("/js-cookie", express.static(path.join(__dirname, "../node_modules/js-cookie/src")));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '../public')));
+app.use('/images', express.static(path.resolve(config.get('artwork.saveDir'))));
+app.use('/js-cookie', express.static(path.join(__dirname, '../node_modules/js-cookie/dist')));
 
 // CORS
 app.use((req, res, next) => {
@@ -58,7 +48,6 @@ app.use((req, res, next) => {
 
 // Routes
 app.use('/', apiRoutes);
-app.get("/", (req, res) => res.sendFile(path.resolve(__dirname, "../public/index.html")));
 
 // Init Services
 socketService.init(io);
@@ -70,11 +59,47 @@ server.listen(listenPort, () => {
     console.log(`Roon Cover Art Server listening on port ${listenPort}`);
 });
 
-// Error handling
+let shutdownStarted = false;
+
+async function shutdown(reason, exitCode) {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
+    process.exitCode = exitCode;
+
+    console.log('Shutting down: ' + reason);
+
+    const forceExitTimer = setTimeout(() => {
+        console.error('Shutdown timed out, forcing exit');
+        process.exit(exitCode);
+    }, 5000);
+
+    try {
+        keyboardService.stop();
+        roonService.stop();
+        await io.close();
+    } catch (error) {
+        console.error('Shutdown error:', error);
+        process.exitCode = 1;
+    } finally {
+        clearTimeout(forceExitTimer);
+        process.exit(process.exitCode);
+    }
+}
+
+process.once('SIGTERM', () => {
+    shutdown('SIGTERM', 0);
+});
+
+process.once('SIGINT', () => {
+    shutdown('SIGINT', 0);
+});
+
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
+    shutdown('uncaught exception', 1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    shutdown('unhandled rejection', 1);
 });

@@ -10,7 +10,7 @@ class ImageService {
         this.maxImages = 300;
         this.imageInfoFile = 'image_info.json';
         this.imageInfoCache = null;
-        this.ensureDirectoryExists(this.saveDir);
+        this.saveQueue = Promise.resolve();
     }
 
     normalizeFormat(format) {
@@ -70,7 +70,16 @@ class ImageService {
 
     async saveImageInfo(imageInfo) {
         const infoPath = path.join(this.saveDir, this.imageInfoFile);
-        await fs.writeFile(infoPath, JSON.stringify(imageInfo, null, 2));
+        const tempPath = `${infoPath}.${process.pid}.tmp`;
+
+        try {
+            await fs.writeFile(tempPath, JSON.stringify(imageInfo, null, 2));
+            await fs.rename(tempPath, infoPath);
+        } catch (error) {
+            await fs.unlink(tempPath).catch(() => {});
+            throw error;
+        }
+
         this.imageInfoCache = imageInfo;
     }
 
@@ -165,8 +174,14 @@ class ImageService {
         }
     }
 
-    async saveArtwork(imageBuffer, albumName) {
-         try {
+    saveArtwork(imageBuffer, albumName) {
+        const operation = this.saveQueue.then(() => this.saveArtworkInternal(imageBuffer, albumName));
+        this.saveQueue = operation.catch(() => undefined);
+        return operation;
+    }
+
+    async saveArtworkInternal(imageBuffer, albumName) {
+        try {
             await this.ensureDirectoryExists(this.saveDir);
 
             const sanitizedName = this.sanitizeFilename(albumName);
@@ -201,10 +216,10 @@ class ImageService {
             console.log(`Artwork saved: ${filepath}`);
             return true;
 
-         } catch (error) {
-             console.error('Error saving artwork:', error);
-             return false;
-         }
+        } catch (error) {
+            console.error('Error saving artwork:', error);
+            return false;
+        }
     }
 }
 

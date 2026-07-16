@@ -1,6 +1,6 @@
 services:
   coverart:
-    image: ${COVERART_IMAGE:-epochaudio/coverart:3.1.7}
+    image: ${COVERART_IMAGE:-epochaudio/coverart:3.1.8}
     container_name: ${COVERART_CONTAINER_NAME:-coverart-app}
     init: true
     pull_policy: missing
@@ -22,9 +22,3 @@ services:
       - type: bind
         source: ./config.json
         target: /app/config.json
-    healthcheck:
-      test: ["CMD", "node", "-e", "const http=require('http');const config=require('config');const port=process.env.PORT||(config.has('server.port')?config.get('server.port'):3666);const req=http.get({host:'127.0.0.1',port,path:'/api/pair'},res=>process.exit(res.statusCode<500?0:1));req.setTimeout(3000,()=>{req.destroy();process.exit(1)});req.on('error',()=>process.exit(1));"]
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
-      retries: 3

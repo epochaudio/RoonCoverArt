@@ -30,7 +30,7 @@ class RoonService extends EventEmitter {
         this.roon = new RoonApi({
             extension_id: "com.epochaudio.coverart",
             display_name: "CoverArt_Square_Docker",
-            display_version: "3.1.7",
+            display_version: "3.1.8",
             publisher: "门耳朵制作",
             email: "masked",
             website: "https://shop236654229.taobao.com/",
@@ -45,7 +45,7 @@ class RoonService extends EventEmitter {
         this.svc_settings = new RoonApiSettings(this.roon, {
             get_settings: (cb) => cb(this.makeLayout(this.settings)),
             save_settings: (req, isdryrun, new_settings) => {
-                let l = this.makeLayout(new_settings.values);
+                const l = this.makeLayout(new_settings.values);
                 req.send_complete(l.has_error ? "NotValid" : "Success", { settings: l });
                 if (!l.has_error && !isdryrun) {
                     this.settings = l.values;
@@ -127,8 +127,26 @@ class RoonService extends EventEmitter {
         this.roon.start_discovery();
     }
 
+    stop() {
+        const core = this.core;
+
+        this.unsubscribeZones();
+        this.core = null;
+        this.transport = null;
+        this.pairStatus = false;
+        this.zoneStatus = [];
+
+        if (core && core.moo && core.moo.transport && typeof core.moo.transport.close === 'function') {
+            try {
+                core.moo.transport.close();
+            } catch (error) {
+                console.warn('Failed to close Roon Core connection:', error);
+            }
+        }
+    }
+
     makeLayout(settings) {
-        let l = {
+        const l = {
             values: settings,
             layout: [],
             has_error: false
@@ -177,10 +195,11 @@ class RoonService extends EventEmitter {
     subscribeZones() {
         if (!this.core || !this.core.moo || !this.transport) return;
 
-        this.zoneSubscription = this.core.moo._subscribe_helper(TRANSPORT_SERVICE, "zones", (cmd, data) => {
-            this.updateTransportZoneCache(cmd, data);
-            this.handleZoneEvent(cmd, data);
-        });
+        this.zoneSubscription = this.core.moo._subscribe_helper(
+            TRANSPORT_SERVICE,
+            "zones",
+            (cmd, data) => this.handleZoneEvent(cmd, data)
+        );
     }
 
     unsubscribeZones() {
@@ -195,44 +214,6 @@ class RoonService extends EventEmitter {
             console.warn('Failed to unsubscribe zones:', err);
         } finally {
             this.zoneSubscription = null;
-        }
-    }
-
-    updateTransportZoneCache(cmd, data = {}) {
-        if (!this.transport) return;
-
-        if (cmd === "Subscribed") {
-            this.transport._zones = (data.zones || []).reduce((zones, zone) => {
-                zones[zone.zone_id] = zone;
-                return zones;
-            }, {});
-        } else if (cmd === "Changed" && this.transport._zones) {
-            if (data.zones_removed) {
-                data.zones_removed.forEach(zone => {
-                    const zoneId = typeof zone === 'string' ? zone : zone.zone_id;
-                    delete this.transport._zones[zoneId];
-                });
-            }
-            if (data.zones_added) {
-                data.zones_added.forEach(zone => {
-                    this.transport._zones[zone.zone_id] = zone;
-                });
-            }
-            if (data.zones_changed) {
-                data.zones_changed.forEach(zone => {
-                    this.transport._zones[zone.zone_id] = zone;
-                });
-            }
-            if (data.zones_seek_changed) {
-                data.zones_seek_changed.forEach(change => {
-                    const zone = this.transport._zones[change.zone_id];
-                    if (!zone) return;
-                    if (zone.now_playing) zone.now_playing.seek_position = change.seek_position;
-                    zone.queue_time_remaining = change.queue_time_remaining;
-                });
-            }
-        } else if (cmd === "Unsubscribed") {
-            delete this.transport._zones;
         }
     }
 

@@ -11,7 +11,6 @@ const IMAGES_TO_UPDATE = 3; // 每次更新3张图片
 
 // 设置相关
 const settings = {
-    theme: readCookie("settings['theme']") || 'dark',
     zoneID: readCookie("settings['zoneID']") || null
 };
 
@@ -25,7 +24,6 @@ class ImageLoader {
 
     loadImage(url) {
         if (this.imagePool.has(url)) {
-            console.log('从缓存加载图片:', url);
             return Promise.resolve(this.imagePool.get(url));
         }
 
@@ -54,11 +52,9 @@ class ImageLoader {
 
     cleanImagePool() {
         if (this.imagePool.size > this.maxPoolSize) {
-            console.log('清理图片缓存池');
             const entries = Array.from(this.imagePool.entries());
             const toRemove = entries.slice(0, entries.length - this.maxPoolSize);
             toRemove.forEach(([url, img]) => {
-                console.log('从缓存池移除:', url);
                 // 显式清理图片资源
                 img.src = '';
                 img.onload = null;
@@ -79,114 +75,8 @@ function imageFileUrl(filename) {
     return `/images/${encodeURIComponent(filename)}`;
 }
 
-// 修改现有的图片加载相关函数
-async function loadImage(url) {
-    try {
-        return await imageLoader.loadImage(url);
-    } catch (error) {
-        console.error('图片加载失败:', error);
-        throw error;
-    }
-}
-
-// 内存监控
-function monitorMemory() {
-    if (window.performance && window.performance.memory) {
-        const memory = window.performance.memory;
-        const usedMB = Math.round(memory.usedJSHeapSize / 1024 / 1024);
-        const limitMB = Math.round(memory.jsHeapSizeLimit / 1024 / 1024);
-
-        console.log('内存使用情况:', {
-            限制: limitMB + 'MB',
-            已使用: usedMB + 'MB',
-            使用率: Math.round((memory.usedJSHeapSize / memory.jsHeapSizeLimit) * 100) + '%'
-        });
-
-        // 降低内存阈值到60%
-        if (memory.usedJSHeapSize / memory.jsHeapSizeLimit > 0.6) {
-            console.log('内存使用过高，开始清理');
-            forceCleanup();
-        }
-    }
-}
-
-// 强制清理函数
-function forceCleanup() {
-    console.log('执行强制内存清理');
-
-    // 清理图片缓存
-    imageLoader.cleanImagePool();
-
-    // 清理显示缓存
-    if (typeof displayImageCache !== 'undefined') {
-        displayImageCache.clear();
-        displayCacheSize = 0;
-    }
-
-    // 清理DOM中的空图片
-    document.querySelectorAll('img[src*="transparent.png"]').forEach(img => {
-        img.removeAttribute('src');
-    });
-
-    // 强制垃圾回收
-    if (window.gc) {
-        window.gc();
-    }
-}
-
-// 错误恢复机制
-function attemptRecovery() {
-    console.log('开始执行恢复程序');
-    imageLoader.cleanImagePool();
-    if (updateInterval) {
-        clearInterval(updateInterval);
-        updateInterval = null;
-    }
-    setTimeout(() => {
-        console.log('尝试重新初始化显示');
-        initializeGridDisplay();
-    }, 5000);
-}
-
-// 时钟功能
-function updateTime() {
-    const clockContent = document.querySelector('.clock-content');
-    if (!clockContent) {
-        // 时钟元素不存在时静默返回（专辑显示模式下是正常的）
-        return;
-    }
-
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        weekday: 'long'
-    });
-
-    const timeStr = now.toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-    });
-
-    const dateElement = clockContent.querySelector('.date');
-    const timeElement = clockContent.querySelector('.time');
-
-    if (dateElement) {
-        dateElement.textContent = dateStr;
-    }
-
-    if (timeElement) {
-        const [hours, minutes, seconds] = timeStr.split(':');
-        timeElement.innerHTML = `${hours}:${minutes}<span class="seconds">${seconds}</span>`;
-    }
-}
-
 // 显示模式切换
 function toggleDisplayMode(isPlaying) {
-    console.log('切换显示模式, isPlaying:', isPlaying);
     const gridContainer = document.getElementById('gridContainer');
     const playingContainer = document.getElementById('playingContainer');
 
@@ -199,35 +89,28 @@ function toggleDisplayMode(isPlaying) {
     }
 
     if (isPlaying) {
-        console.log('切换到播放显示模式');
         gridContainer.classList.add('hidden');
         playingContainer.classList.remove('hidden');
         if (updateInterval) {
-            console.log('清除网格更新定时器');
             clearInterval(updateInterval);
             updateInterval = null;
         }
     } else {
-        console.log('切换到网格显示模式');
         playingContainer.classList.add('hidden');
         gridContainer.classList.remove('hidden');
-        console.log('初始化网格显示');
         initializeGridDisplay();
     }
 }
 
 function clearPlaybackFallbackTimer() {
     if (!playbackTimer) return;
-    console.log('清除现有定时器');
     clearTimeout(playbackTimer);
     playbackTimer = null;
 }
 
 function scheduleGridDisplayFallback(delayMs) {
     clearPlaybackFallbackTimer();
-    console.log(`设置${delayMs / 1000}秒切换定时器`);
     playbackTimer = setTimeout(() => {
-        console.log(`${delayMs / 1000}秒已到，切换到网格显示`);
         toggleDisplayMode(false);
         playbackTimer = null;
     }, delayMs);
@@ -236,13 +119,17 @@ function scheduleGridDisplayFallback(delayMs) {
 function resolveCurrentZone(payload) {
     if (!payload || payload.length === 0) return null;
 
-    if (!settings.zoneID) {
-        settings.zoneID = payload[0].zone_id;
-        console.log('设置新的zoneID:', settings.zoneID);
+    const selectedZone = settings.zoneID
+        ? payload.find(zone => zone.zone_id === settings.zoneID)
+        : null;
+    const resolvedZone = selectedZone || payload[0];
+
+    if (settings.zoneID !== resolvedZone.zone_id) {
+        settings.zoneID = resolvedZone.zone_id;
         setCookie("settings['zoneID']", settings.zoneID);
     }
 
-    return payload.find(z => z.zone_id === settings.zoneID) || payload[0];
+    return resolvedZone;
 }
 
 // 图片更新相关函数
@@ -251,29 +138,20 @@ async function initializeGridDisplay() {
         clearInterval(updateInterval);
     }
 
-    try {
-        await updateGridImages();
-        // 设置120秒更新间隔
-        updateInterval = setInterval(updateRandomImages, GRID_UPDATE_INTERVAL);
-        console.log('设置了定时更新，间隔: 120秒');
-    } catch (error) {
-        console.error('初始化网格显示失败:', error);
-        attemptRecovery();
-    }
+    await updateGridImages();
+    updateInterval = setInterval(updateRandomImages, GRID_UPDATE_INTERVAL);
 }
 
 async function updateGridImages() {
-    console.log('Fetching initial random images');
     try {
         const response = await fetch('/api/images/random?count=16');
         if (!response.ok) throw new Error('Failed to fetch images');
 
         const images = await response.json();
-        console.log('Received images:', images.length);
 
         if (images.length === 0) return;
 
-        const gridItems = document.querySelectorAll('.grid-item:not(.clock)');
+        const gridItems = document.querySelectorAll('.grid-item');
 
         // We might get fewer than 16 images if the library is small
         // Duplicate if necessary to fill grid? Or just leave empty/transparent?
@@ -286,7 +164,7 @@ async function updateGridImages() {
 
                 if (image) {
                     const imageUrl = imageFileUrl(image);
-                    const loadedImg = await loadImage(imageUrl);
+                    const loadedImg = await imageLoader.loadImage(imageUrl);
                     const frontImg = gridItem.querySelector('.front');
                     const backImg = gridItem.querySelector('.back');
                     if (frontImg) frontImg.src = loadedImg.src;
@@ -304,7 +182,6 @@ async function updateGridImages() {
 }
 
 async function updateRandomImages() {
-    console.log('Starting random update...');
     try {
         // Request more than needed (10) to allow for filtering duplicates
         const response = await fetch('/api/images/random?count=10');
@@ -313,7 +190,7 @@ async function updateRandomImages() {
         const newImages = await response.json();
         if (newImages.length === 0) return;
 
-        const gridItems = document.querySelectorAll('.grid-item:not(.clock)');
+        const gridItems = document.querySelectorAll('.grid-item');
 
         // Get currently displayed images to avoid immediate duplicates if possible
         const currentImages = Array.from(gridItems).map(item => {
@@ -322,32 +199,27 @@ async function updateRandomImages() {
             return src.includes('/images/') ? decodeURIComponent(src.split('/images/')[1]) : null;
         });
 
-        // Select positions to update
-        const positions = Array.from({ length: gridItems.length }, (_, i) => i)
-            .filter(i => !gridItems[i].closest('.clock'));
-
+        const positions = Array.from({ length: gridItems.length }, (_, index) => index);
         const updatePositions = [];
         for (let i = 0; i < IMAGES_TO_UPDATE && positions.length > 0; i++) {
             const randomIndex = Math.floor(Math.random() * positions.length);
             updatePositions.push(positions.splice(randomIndex, 1)[0]);
         }
 
-        // Assign new images to positions
+        const candidates = newImages.filter(image => !currentImages.includes(image));
         const updates = await Promise.all(updatePositions.map(async position => {
-            // Find an image that is not currently displayed
-            let selectedImage = newImages.find(img => !currentImages.includes(img));
-
-            // If all are displayed (rare/small library), just pick one
-            if (!selectedImage) selectedImage = newImages[Math.floor(Math.random() * newImages.length)];
-
-            // Remove from pool so we don't use it twice in this batch
-            const index = newImages.indexOf(selectedImage);
-            if (index > -1) newImages.splice(index, 1);
+            let selectedImage;
+            if (candidates.length > 0) {
+                const candidateIndex = Math.floor(Math.random() * candidates.length);
+                selectedImage = candidates.splice(candidateIndex, 1)[0];
+            } else {
+                selectedImage = newImages[Math.floor(Math.random() * newImages.length)];
+            }
 
             const imageUrl = imageFileUrl(selectedImage);
             try {
-                const loadedImg = await loadImage(imageUrl);
-                return { position, loadedImg, newImage: selectedImage };
+                const loadedImg = await imageLoader.loadImage(imageUrl);
+                return { position, loadedImg };
             } catch (error) {
                 console.error(`Preload failed for position ${position}:`, error);
                 return { position, error: true };
@@ -367,8 +239,6 @@ async function updateRandomImages() {
             backImg.src = update.loadedImg.src;
             gridItem.classList.add('flip');
 
-            // Update current images list (conceptually)
-
             await new Promise(resolve => {
                 setTimeout(() => {
                     const frontImg = gridItem.querySelector('.front');
@@ -386,19 +256,19 @@ async function updateRandomImages() {
 
 // 图片更新函数
 function updateImage(imageKey, albumName) {
-    console.log('开始更新图片:', { imageKey, albumName });
+    const coverImage = document.getElementById('coverImage');
+    if (!coverImage) return;
+
     if (!imageKey) {
-        console.log('无图片key，使用默认图片');
-        $('#coverImage').attr('src', '/img/transparent.png');
+        coverImage.src = '/img/transparent.png';
         return;
     }
 
-    const imageUrl = '/roonapi/getImage?image_key=' + imageKey +
-        '&albumName=' + encodeURIComponent(albumName || '') +
-        '&scale=full&format=image/jpeg&quality=100';
-    console.log('图片URL:', imageUrl);
-
-    $('#coverImage').attr('src', imageUrl);
+    const params = new URLSearchParams({ image_key: imageKey });
+    if (albumName) {
+        params.set('albumName', albumName);
+    }
+    coverImage.src = '/roonapi/getImage?' + params.toString();
 }
 
 // Cookie 相关函数
@@ -412,7 +282,6 @@ function setCookie(name, value) {
 
 // 传输控制处理函数
 function handleTransportCommand(data) {
-    console.log('发送传输控制命令:', data);
     if (socket && socket.connected) {
         socket.emit('transport', {
             zoneID: settings.zoneID,
@@ -432,12 +301,12 @@ function updateMediaSessionInfo(nowPlaying) {
             album: nowPlaying.three_line?.line3 || nowPlaying.album || '未知专辑',
             artwork: nowPlaying.image_key ? [
                 {
-                    src: `/roonapi/getImage4k?image_key=${nowPlaying.image_key}`,
+                    src: `/roonapi/getImage4k?image_key=${encodeURIComponent(nowPlaying.image_key)}`,
                     sizes: '2160x2160',
                     type: 'image/jpeg'
                 },
                 {
-                    src: `/roonapi/getImage?image_key=${nowPlaying.image_key}&scale=full&format=image/jpeg`,
+                    src: `/roonapi/getImage?image_key=${encodeURIComponent(nowPlaying.image_key)}`,
                     sizes: '1080x1080',
                     type: 'image/jpeg'
                 }
@@ -450,156 +319,70 @@ function updateMediaSessionInfo(nowPlaying) {
 
 // 事件监听器设置
 document.addEventListener('DOMContentLoaded', function () {
-    updateTime();
-    setInterval(updateTime, 1000);
     initializeGridDisplay();
 
-    // 初始化键盘控制器
     if (typeof KeyboardController !== 'undefined') {
         keyboardController = new KeyboardController();
         keyboardController.on('transport', handleTransportCommand);
-        console.log('键盘控制器已初始化并连接到传输控制');
     } else {
         console.warn('KeyboardController 类未找到');
     }
-
-    // 启动内存监控，每2分钟检查一次
-    setInterval(monitorMemory, 120000);
-
-    // 每10分钟执行一次强制清理
-    setInterval(forceCleanup, 600000);
 });
 
 // Socket.IO 事件处理
 socket.on('pairStatus', function (payload) {
-    console.log('收到配对状态:', payload);
     const pairDisabled = document.getElementById('pairDisabled');
     if (payload && payload.pairEnabled === true) {
         if (pairDisabled) pairDisabled.style.display = 'none';
-        console.log('发送getZone请求:', settings.zoneID || true);
-        socket.emit("getZone", settings.zoneID || true);
-    } else {
-        if (pairDisabled) pairDisabled.style.display = 'flex';
+        socket.emit('getZone', settings.zoneID || true);
+    } else if (pairDisabled) {
+        pairDisabled.style.display = 'flex';
     }
 });
 
 socket.on('zoneStatus', function (payload) {
-    console.log('收到区域状态:', payload);
-    if (payload && payload.length > 0) {
-        const zone = resolveCurrentZone(payload);
-        console.log('当前zone详细信息:', {
-            zone_id: zone.zone_id,
-            display_name: zone.display_name,
-            state: zone.state,
-            now_playing: zone.now_playing ? {
-                image_key: zone.now_playing.image_key,
-                three_line: zone.now_playing.three_line,
-                album: zone.now_playing.album
-            } : '无播放信息'
-        });
+    const zone = resolveCurrentZone(payload);
+    if (!zone) return;
 
-        if (zone.now_playing) {
-            if (zone.now_playing.image_key !== currentImageKey) {
-                const nowPlaying = zone.now_playing;
-                console.log('更新图片key:', nowPlaying.image_key);
-                currentImageKey = nowPlaying.image_key;
+    if (zone.now_playing && zone.now_playing.image_key !== currentImageKey) {
+        const nowPlaying = zone.now_playing;
+        currentImageKey = nowPlaying.image_key;
+        const albumName = nowPlaying.three_line?.line3 || nowPlaying.album;
+        updateImage(currentImageKey, albumName);
+        updateMediaSessionInfo(nowPlaying);
+    }
 
-                // 获取专辑名称
-                const albumName = nowPlaying.three_line?.line3 || nowPlaying.album;
+    if (zone.state === 'playing') {
+        clearPlaybackFallbackTimer();
+        toggleDisplayMode(true);
+    } else if (zone.state) {
+        scheduleGridDisplayFallback(GRID_FALLBACK_DELAY_MS);
+    }
 
-                console.log('专辑信息:', {
-                    albumName,
-                    来源: nowPlaying.three_line?.line3 ? 'three_line.line3' : 'album字段',
-                    原始数据: {
-                        three_line: nowPlaying.three_line,
-                        album: nowPlaying.album
-                    }
-                });
-
-                if (albumName) {
-                    updateImage(currentImageKey, albumName);
-                } else {
-                    console.warn('警告：无法获取专辑名称，完整数据:', nowPlaying);
-                    updateImage(currentImageKey);
-                }
-
-                // 更新MediaSession信息
-                updateMediaSessionInfo(nowPlaying);
-            } else if (zone.state === 'playing') {
-                console.log('封面未变化，但检测到播放已恢复，保持播放模式');
-            }
-        }
-
-        if (zone.state === 'playing') {
-            if (playbackTimer) {
-                console.log('恢复播放，取消网格切换定时器');
-                clearPlaybackFallbackTimer();
-            }
-            toggleDisplayMode(true);
-        }
-
-        // 更新MediaSession播放状态
-        if (keyboardController) {
-            const playbackState = zone.state === 'playing' ? 'playing' :
-                zone.state === 'paused' ? 'paused' : 'none';
-            keyboardController.setPlaybackState(playbackState);
-        }
-
-        // 处理非播放状态（paused, stopped等）
-        if (zone.state && zone.state !== 'playing') {
-            console.log('检测到非播放状态:', zone.state);
-            scheduleGridDisplayFallback(GRID_FALLBACK_DELAY_MS);
-        }
-    } else {
-        console.log('未收到区域信息或区域列表为空');
+    if (keyboardController) {
+        const playbackState = zone.state === 'playing'
+            ? 'playing'
+            : zone.state === 'paused' ? 'paused' : 'none';
+        keyboardController.setPlaybackState(playbackState);
     }
 });
 
-socket.on('notPlaying', function (data) {
-    console.log('收到非播放状态事件:', data);
-    try {
-        scheduleGridDisplayFallback(GRID_FALLBACK_DELAY_MS);
-    } catch (error) {
-        console.error('处理非播放状态事件时出错:', error);
-    }
+socket.on('notPlaying', function () {
+    scheduleGridDisplayFallback(GRID_FALLBACK_DELAY_MS);
 });
 
 socket.on('nowplaying', function (data) {
-    console.log('收到开始播放事件:', data);
+    if (!data || !data.image_key) return;
 
-    try {
-        if (data && data.image_key) {
-            console.log('更新当前播放封面');
-            currentImageKey = data.image_key;
+    currentImageKey = data.image_key;
+    const albumName = data.three_line?.line3 || data.album;
+    updateImage(data.image_key, albumName);
+    updateMediaSessionInfo(data);
 
-            // 获取专辑名称
-            const albumName = data.three_line?.line3 || data.album;
-
-            if (albumName) {
-                updateImage(data.image_key, albumName);
-            } else {
-                console.warn('警告：无法获取专辑名称，完整数据:', data);
-                updateImage(data.image_key);
-            }
-
-            // 更新MediaSession信息
-            updateMediaSessionInfo(data);
-
-            // 设置MediaSession为播放状态
-            if (keyboardController) {
-                keyboardController.setPlaybackState('playing');
-            }
-
-            // 立即切换到播放显示模式
-            toggleDisplayMode(true);
-        }
-
-        // 清除任何现有的切换定时器
-        if (playbackTimer) {
-            console.log('取消切换定时器');
-            clearPlaybackFallbackTimer();
-        }
-    } catch (error) {
-        console.error('处理播放事件时出错:', error);
+    if (keyboardController) {
+        keyboardController.setPlaybackState('playing');
     }
+
+    clearPlaybackFallbackTimer();
+    toggleDisplayMode(true);
 });
