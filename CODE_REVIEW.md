@@ -88,4 +88,5 @@
 - `npm ci` 使用 BuildKit cache mount，依赖层失效时复用 npm 下载缓存。
 - `.dockerignore` 排除测试目录，测试保留为本地和发布前独立校验。
 - 健康检查只在 Dockerfile 中维护，Compose 继承镜像默认配置。
+- Roon SDK 协议日志默认关闭，Compose 的 json-file 日志限制为 10 MiB × 3。
 - 后续发布可固定 Node 基础镜像 digest，进一步提高可复现性。

@@ -339,6 +339,7 @@ PORT=3000 npm start
 - 升级生产依赖并将安全审计结果收敛到 0 个漏洞
 - Roon 扩展上报版本和 Docker 默认镜像标签升级到 3.1.8
 - Docker 构建升级到 Node.js 24 LTS，并增加依赖缓存
+- 默认关闭 Roon SDK 协议日志，并限制 Docker 日志文件大小
 
 ### 3.1.7 (2026-05-09) 宿主机键盘音量控制
 - 宿主机物理键新增音量控制：`KEY_VOLUMEUP`、`KEY_VOLUMEDOWN`、`KEY_MUTE`

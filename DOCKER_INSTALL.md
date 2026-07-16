@@ -280,6 +280,7 @@ docker run -d \
 
 - `COVERART_IMAGE`: 镜像标签，默认 `epochaudio/coverart:3.1.8`
 - `COVERART_CONTAINER_NAME`: 容器名，默认 `coverart-app`
+- `ROON_LOG_LEVEL`: Roon SDK 日志级别，默认 `none`；排查协议问题时可临时设为 `all`
 - `INPUT_GID`: 使用 `docker-compose.keyboard.yml` 时必填，宿主机 `input` 组 GID
 - `KEYBOARD_ENABLED`: 宿主机键盘控制开关，默认 `true`；设为 `false` 可关闭
 - `KEYBOARD_CONTAINER_USER`: 启用键盘控制时的容器用户，默认 `node`；设备为 `root:root 0600` 时可设为 `root`

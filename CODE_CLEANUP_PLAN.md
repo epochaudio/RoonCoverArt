@@ -83,5 +83,5 @@
 - 删除无 DOM 对应物的时钟、非标准内存监控、无效恢复包装、第二封面节点和 Roon transport 私有缓存镜像。
 - 精简浏览器键盘控制和 Socket 事件处理，并修复小图库随机更新可能请求无效图片的问题。
 - Roon 上报版本、npm 版本和 Docker 默认镜像标签统一升级到 3.1.8。
-- Docker 升级到 Node.js 24 LTS，增加 npm 缓存，并删除 Compose 重复健康检查。
+- Docker 升级到 Node.js 24 LTS，增加 npm 缓存，删除 Compose 重复健康检查，并限制 Roon/Docker 日志。
 - JavaScript 语法、并发保存测试、生产依赖树、安全审计、三套 Compose、HTTP、真实 Roon 配对、SIGTERM 和 Docker 健康检查全部通过。

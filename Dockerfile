@@ -14,6 +14,7 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked \
 FROM node:24-alpine AS runtime
 
 ENV NODE_ENV=production \
+    ROON_LOG_LEVEL=none \
     ROON_PERSIST_PATH=/app/config.json
 WORKDIR /app
 
@@ -21,7 +22,7 @@ COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node package.json package-lock.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node public ./public
-COPY --chown=node:node config/default.json ./config/default.json
+COPY --chown=node:node config/default.json config/production.json ./config/
 
 # Runtime data paths (usually bind-mounted by docker-compose)
 RUN mkdir -p /app/images /app/config && \

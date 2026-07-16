@@ -6,11 +6,17 @@ services:
     pull_policy: missing
     environment:
       NODE_ENV: production
+      ROON_LOG_LEVEL: ${ROON_LOG_LEVEL:-none}
       ROON_PERSIST_PATH: /app/config.json
     network_mode: "host"
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       - type: bind
         source: ./images

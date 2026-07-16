@@ -11,6 +11,7 @@
 - Roon 扩展上报版本和 Docker 默认镜像标签升级到 3.1.8。
 - Docker 基础镜像升级到 Node.js 24 LTS，并增加 BuildKit npm 缓存。
 - Compose 继承镜像健康检查，删除重复配置。
+- 默认关闭 Roon SDK 协议日志，增加 Docker 日志轮转，并消除 production 配置警告。
 
 ## 3.1.7 (2026-05-09)
 
